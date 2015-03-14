@@ -71,6 +71,15 @@
 #include "mtk.h"
 #include "ashtech.h"
 
+//DEBUG BEGIN
+#include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/vehicle_status.h>
+static int sp_man_sub = -1;
+static struct manual_control_setpoint_s sp_man;
+static int vehicleStatusSub = -1;
+static struct vehicle_status_s vehicleStatus;
+//DEBUG END
+
 
 #define TIMEOUT_5HZ 500
 #define RATE_MEASUREMENT_PERIOD 5000000
@@ -285,6 +294,13 @@ GPS::task_main()
 		_exit(1);
 	}
 
+	//DEBUG BEGIN
+	sp_man_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
+	memset(&sp_man, 0, sizeof(sp_man));
+	vehicleStatusSub = orb_subscribe(ORB_ID(vehicle_status));
+	memset(&vehicleStatus, 0, sizeof(vehicleStatus));
+	//DEBUG END
+
 	uint64_t last_rate_measurement = hrt_absolute_time();
 	unsigned last_rate_count = 0;
 
@@ -292,23 +308,52 @@ GPS::task_main()
 	while (!_task_should_exit) {
 
 		if (_fake_gps) {
-			_report_gps_pos.timestamp_position = hrt_absolute_time();
-			_report_gps_pos.lat = (int32_t)47.378301e7f;
-			_report_gps_pos.lon = (int32_t)8.538777e7f;
-			_report_gps_pos.alt = (int32_t)1200e3f;
-			_report_gps_pos.timestamp_variance = hrt_absolute_time();
-			_report_gps_pos.s_variance_m_s = 10.0f;
-			_report_gps_pos.c_variance_rad = 0.1f;
-			_report_gps_pos.fix_type = 3;
-			_report_gps_pos.eph = 0.9f;
-			_report_gps_pos.epv = 1.8f;
-			_report_gps_pos.timestamp_velocity = hrt_absolute_time();
-			_report_gps_pos.vel_n_m_s = 0.0f;
-			_report_gps_pos.vel_e_m_s = 0.0f;
-			_report_gps_pos.vel_d_m_s = 0.0f;
-			_report_gps_pos.vel_m_s = sqrtf(_report_gps_pos.vel_n_m_s * _report_gps_pos.vel_n_m_s + _report_gps_pos.vel_e_m_s * _report_gps_pos.vel_e_m_s + _report_gps_pos.vel_d_m_s * _report_gps_pos.vel_d_m_s);
-			_report_gps_pos.cog_rad = 0.0f;
-			_report_gps_pos.vel_ned_valid = true;				
+			//DEBUG BEGIN: Disable GPS using aux1
+			orb_copy(ORB_ID(vehicle_status), vehicleStatusSub, &vehicleStatus);
+			orb_copy(ORB_ID(manual_control_setpoint), sp_man_sub, &sp_man);
+			if(vehicleStatus.rc_signal_found_once && !vehicleStatus.rc_signal_lost && sp_man.aux1 < -0.5f) {
+				_report_gps_pos.timestamp_position = hrt_absolute_time();
+				_report_gps_pos.timestamp_variance = hrt_absolute_time();
+				_report_gps_pos.timestamp_velocity = hrt_absolute_time();
+				_report_gps_pos.fix_type		= 0;
+				_report_gps_pos.satellites_used	= 0;
+
+				//Don't modify Lat/Lon/AMSL
+
+				_report_gps_pos.eph		      = (float)0xFFFF;
+				_report_gps_pos.epv		      = (float)0xFFFF;
+				_report_gps_pos.s_variance_m_s = (float)0xFFFF;
+
+				_report_gps_pos.vel_m_s		  = 0.0f;
+				_report_gps_pos.vel_n_m_s	  = 0.0f;
+				_report_gps_pos.vel_e_m_s	  = 0.0f;
+				_report_gps_pos.vel_d_m_s	  = 0.0f;
+				_report_gps_pos.vel_ned_valid  = false;
+
+				_report_gps_pos.cog_rad		  = 0.0f;
+				_report_gps_pos.c_variance_rad = (float)0xFFFF;
+			}
+			//DEBUG END	
+
+			else {
+				_report_gps_pos.timestamp_position = hrt_absolute_time();
+				_report_gps_pos.lat = (int32_t)47.378301e7f;
+				_report_gps_pos.lon = (int32_t)8.538777e7f;
+				_report_gps_pos.alt = (int32_t)1200e3f;
+				_report_gps_pos.timestamp_variance = hrt_absolute_time();
+				_report_gps_pos.s_variance_m_s = 10.0f;
+				_report_gps_pos.c_variance_rad = 0.1f;
+				_report_gps_pos.fix_type = 3;
+				_report_gps_pos.eph = 0.9f;
+				_report_gps_pos.epv = 1.8f;
+				_report_gps_pos.timestamp_velocity = hrt_absolute_time();
+				_report_gps_pos.vel_n_m_s = 0.0f;
+				_report_gps_pos.vel_e_m_s = 0.0f;
+				_report_gps_pos.vel_d_m_s = 0.0f;
+				_report_gps_pos.vel_m_s = sqrtf(_report_gps_pos.vel_n_m_s * _report_gps_pos.vel_n_m_s + _report_gps_pos.vel_e_m_s * _report_gps_pos.vel_e_m_s + _report_gps_pos.vel_d_m_s * _report_gps_pos.vel_d_m_s);
+				_report_gps_pos.cog_rad = 0.0f;
+				_report_gps_pos.vel_ned_valid = true;				
+			}
 
 			//no time and satellite information simulated
 
@@ -364,6 +409,30 @@ GPS::task_main()
 
 					if (!(_pub_blocked)) {
 						if (helper_ret & 1) {
+
+							//DEBUG BEGIN: Disable GPS using aux1
+							orb_copy(ORB_ID(vehicle_status), vehicleStatusSub, &vehicleStatus);
+							orb_copy(ORB_ID(manual_control_setpoint), sp_man_sub, &sp_man);
+							if(vehicleStatus.rc_signal_found_once && !vehicleStatus.rc_signal_lost && sp_man.aux1 < -0.5f) {
+								_report_gps_pos.fix_type		= 0;
+								_report_gps_pos.satellites_used	= 0;
+
+								//Don't modify Lat/Lon/AMSL
+
+								_report_gps_pos.eph		      = (float)0xFFFF;
+								_report_gps_pos.epv		      = (float)0xFFFF;
+								_report_gps_pos.s_variance_m_s = (float)0xFFFF;
+
+								_report_gps_pos.vel_m_s		  = 0.0f;
+								_report_gps_pos.vel_n_m_s	  = 0.0f;
+								_report_gps_pos.vel_e_m_s	  = 0.0f;
+								_report_gps_pos.vel_d_m_s	  = 0.0f;
+								_report_gps_pos.vel_ned_valid  = false;
+
+								_report_gps_pos.cog_rad		  = 0.0f;
+								_report_gps_pos.c_variance_rad = (float)0xFFFF;
+							}
+							//DEBUG END
 
 							if (_report_gps_pos_pub > 0) {
 								orb_publish(ORB_ID(vehicle_gps_position), _report_gps_pos_pub, &_report_gps_pos);

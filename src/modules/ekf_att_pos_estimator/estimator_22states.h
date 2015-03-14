@@ -306,8 +306,6 @@ public:
 
     static void quat2eul(float (&eul)[3], const float (&quat)[4]);
 
-    //static void quat2Tnb(Mat3f &Tnb, const float (&quat)[4]);
-
     static inline float sq(float valIn) {return valIn * valIn;}
 
     /**
